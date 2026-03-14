@@ -10,7 +10,13 @@ class BaseModel(ABC):
         self.is_fitted: bool = False
 
     @abstractmethod
-    def fit(self, X: np.ndarray, y: np.ndarray) -> None:
+    def fit(self, X: np.ndarray, y: np.ndarray, **kwargs) -> None:
+        """
+        Fit model to training data.
+        Optional kwargs (supported by PyTorch models):
+            X_val: np.ndarray — validation features for early stopping
+            y_val: np.ndarray — validation labels for early stopping
+        """
         pass
 
     @abstractmethod

@@ -1,10 +1,12 @@
-from typing import Optional, Literal, Tuple
+from typing import Optional, Literal, Tuple, List
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import LabelEncoder
 from pathlib import Path
+from src.training.callbacks import Callback, LoggerCallback
+from src.training.trainer import Trainer
 
 from src.models.base_model import BaseModel
 
@@ -84,8 +86,7 @@ class ShallowConvNet(BaseModel):
         batch_size: int = 64,
         dropout: float = 0.5,
         device: Optional[Literal['cuda', 'cpu']] = None,
-        *,
-        logging_indent: str = '',
+        callbacks: Optional[List[Callback]] = None,
     ):
         super().__init__()
         self.n_channels = n_channels
@@ -105,7 +106,15 @@ class ShallowConvNet(BaseModel):
             dropout=dropout,
         ).to(self.device)
 
-        self.logging_indent = logging_indent
+        self._trainer = Trainer(
+            model_arch=self.model,
+            device=self.device,
+            n_epochs=self.n_epochs,
+            batch_size=self.batch_size,
+            lr=self.lr,
+            label_smoothing=0.0,
+            callbacks=callbacks if callbacks is not None else [LoggerCallback(every_n_epochs=10)],
+        )
 
     def _to_tensor(self, X: np.ndarray, y: Optional[np.ndarray] = None) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Convert numpy arrays to torch tensors with correct shape."""
@@ -116,32 +125,21 @@ class ShallowConvNet(BaseModel):
             return X_tensor, y_tensor
         return X_tensor, None
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> None:
-        y_encoded = self._label_encoder.fit_transform(y)
-        X_tensor, y_tensor = self._to_tensor(X, y_encoded)
-
-        loader = DataLoader(
-            TensorDataset(X_tensor, y_tensor),
-            batch_size=self.batch_size,
-            shuffle=True,
+    def fit(
+        self, 
+        X: np.ndarray, 
+        y: np.ndarray, 
+        X_val: Optional[np.ndarray] = None, 
+        y_val: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> None:
+        self._trainer.fit(
+            X_train=X,
+            y_train=self._label_encoder.fit_transform(y),
+            X_val=X_val,
+            y_val=self._label_encoder.transform(y_val) if y_val is not None else None,
+            label_encoder=self._label_encoder,
         )
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
-        criterion = nn.CrossEntropyLoss()
-
-        self.model.train()
-        for epoch in range(self.n_epochs):
-            epoch_loss = 0.0
-            for X_batch, y_batch in loader:
-                optimizer.zero_grad()
-                loss = criterion(self.model(X_batch), y_batch)
-                loss.backward()
-                optimizer.step()
-                epoch_loss += loss.item()
-
-            if (epoch + 1) % 10 == 0:
-                avg_loss = epoch_loss / len(loader)
-                print(f'{self.logging_indent}Epoch [{epoch+1}/{self.n_epochs}] loss: {avg_loss:.4f}')
-
         self.is_fitted = True
 
     def predict(self, X: np.ndarray) -> np.ndarray:

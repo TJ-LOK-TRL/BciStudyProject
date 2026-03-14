@@ -1,4 +1,4 @@
-from typing import Optional, Literal
+from typing import Optional, Literal, List
 from pathlib import Path
 import numpy as np
 import torch
@@ -8,7 +8,8 @@ from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import LabelEncoder
 from transformers import LlamaConfig
 from src.models.llama_eeg import EEGLlamaForCausalLM
-
+from src.training.callbacks import Callback, LoggerCallback
+from src.training.trainer import Trainer
 from src.models.base_model import BaseModel
 
 
@@ -343,6 +344,7 @@ class EEGEncoderModel(BaseModel):
         batch_size: int = 64,
         verbose: bool = False,
         device: Optional[Literal['cuda', 'cpu']] = None,
+        callbacks: Optional[List[Callback]] = None
     ):
         super().__init__()
         self.n_channels = n_channels
@@ -381,6 +383,16 @@ class EEGEncoderModel(BaseModel):
             fuse=fuse,
         ).to(self.device)
 
+        self._trainer = Trainer(
+            model_arch=self.model,
+            device=self.device,
+            n_epochs=self.n_epochs,
+            batch_size=self.batch_size,
+            lr=self.lr,
+            l2_scale=2.0,
+            callbacks=callbacks if callbacks is not None else [LoggerCallback(every_n_epochs=10)],
+        )
+
     def _to_tensor(
         self,
         X: np.ndarray,
@@ -400,35 +412,21 @@ class EEGEncoderModel(BaseModel):
             if hasattr(m, 'l2_loss')
         )
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> None:
-        y_encoded = self._label_encoder.fit_transform(y)
-        X_tensor, y_tensor = self._to_tensor(X, y_encoded)
-
-        loader = DataLoader(
-            TensorDataset(X_tensor, y_tensor),
-            batch_size=self.batch_size,
-            shuffle=True,
+    def fit(
+        self, 
+        X: np.ndarray, 
+        y: np.ndarray, 
+        X_val: Optional[np.ndarray] = None, 
+        y_val: Optional[np.ndarray] = None,
+        **kwargs
+    ) -> None:
+        self._trainer.fit(
+            X_train=X,
+            y_train=self._label_encoder.fit_transform(y),
+            X_val=X_val,
+            y_val=self._label_encoder.transform(y_val) if y_val is not None else None,
+            label_encoder=self._label_encoder,
         )
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
-        criterion = nn.CrossEntropyLoss(label_smoothing=0.2)
-        scaler = torch.amp.GradScaler(self._device_str, enabled=self._device_str == 'cuda')
-
-        self.model.train()
-        for epoch in range(self.n_epochs):
-            epoch_loss = 0.0
-            for X_batch, y_batch in loader:
-                optimizer.zero_grad()
-                with torch.amp.autocast(device_type=self._device_str, enabled=self._device_str == 'cuda'):
-                    logits = self.model(X_batch)
-                    loss = criterion(logits, y_batch) + self._l2_loss()
-                scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
-                epoch_loss += loss.item()
-
-            if self.verbose and (epoch + 1) % 10 == 0:
-                print(f'    Epoch [{epoch+1}/{self.n_epochs}] loss: {epoch_loss/len(loader):.4f}')
-
         self.is_fitted = True
 
     def predict(self, X: np.ndarray) -> np.ndarray:
@@ -462,6 +460,7 @@ class EEGEncoderModel(BaseModel):
             batch_size=self.batch_size,
             verbose=self.verbose,
             device=self._device_str,
+            callbacks=[cb.clone() for cb in self._trainer.callbacks]
         )
 
     def save(self, path: str) -> None:
@@ -512,3 +511,4 @@ class EEGEncoderModel(BaseModel):
             f'device={self.device}, '
             f'fitted={self.is_fitted})'
         )
+    

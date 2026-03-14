@@ -31,7 +31,7 @@ class CSPLDAModel(BaseModel):
             ('lda', LinearDiscriminantAnalysis()),
         ])
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> None:
+    def fit(self, X: np.ndarray, y: np.ndarray, **kwargs) -> None:
         """
         Fit CSP+LDA pipeline.
         X: (n_trials, n_channels, n_times)
