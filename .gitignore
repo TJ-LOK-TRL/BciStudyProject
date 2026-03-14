@@ -1,0 +1,20 @@
+# Dados e Modelos (PESADOS)
+data/
+results/
+*.pt
+*.pth
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Ambientes virtuais e logs
+venvs/
+*.log
+
+# Outros
+.DS_Store
