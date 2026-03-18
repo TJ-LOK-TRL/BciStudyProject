@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Dict
 import numpy as np
-from src.evaluation.metrics import compute_metrics
 
 class BaseModel(ABC):
 
@@ -27,10 +26,6 @@ class BaseModel(ABC):
     def clone(self) -> 'BaseModel':
         """Return a new unfitted instance with the same hyperparameters."""
         pass
-
-    def evaluate(self, X: np.ndarray, y: np.ndarray) -> Dict[str, float]:
-        """Convenience method — predict and compute metrics in one call."""
-        return compute_metrics(y, self.predict(X))
 
     def save(self, path: str) -> None:
         """Save model to disk."""

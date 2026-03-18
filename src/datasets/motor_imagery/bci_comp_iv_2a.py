@@ -16,19 +16,27 @@ class BCICompIV2a(BaseMoabbMiDataset):
 
     CLASS_NAMES: List[str] = ['left_hand', 'right_hand', 'tongue', 'foot']
 
+    EEG_AND_EOG_CHANNELS = [
+        'Fz','FC3','FC1','FCz','FC2','FC4','C5','C3','C1','Cz','C2','C4','C6',
+        'CP3','CP1','CPz','CP2','CP4','P1','Pz','P2','POz',
+        'EOG1','EOG2','EOG3'
+    ]
+
     def __init__(
         self,
         subject_ids: Optional[List[int]] = None,
         tmin: float = 0.5,
         tmax: float = 3.5,
-        resample: float = 250 
+        resample: float = 250,
+        include_eog: bool = False
     ):
         super().__init__(
             moabb_dataset=BNCI2014_001(),
-            subject_ids=subject_ids,
+            subject_ids=subject_ids or [1, 2, 3, 4, 5, 6, 7, 8, 9],
             resample=resample,
             tmin=tmin,
-            tmax=tmax
+            tmax=tmax,
+            channels=self.EEG_AND_EOG_CHANNELS if include_eog else None
         )
 
     @property
@@ -48,9 +56,10 @@ class BCICompIV2a(BaseMoabbMiDataset):
         return 250.0
 
 if __name__ == '__main__':
-    dataset = BCICompIV2a()
+    dataset = BCICompIV2a(include_eog=True)
     print(dataset)
     X, y = dataset.get_data()
     print(f'X shape: {X.shape}')
     print(f'y shape: {y.shape}')
     print(f'Classes: {np.unique(y)}')
+    

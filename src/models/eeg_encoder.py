@@ -114,7 +114,7 @@ class ConvBlock(nn.Module):
         pool_size: int = 7,
         D: int = 2,
         in_chans: int = 22,
-        dropout: float = 0.3,
+        dropout: float = 0.5,
     ):
         super().__init__()
         F2 = F1 * D
@@ -125,7 +125,7 @@ class ConvBlock(nn.Module):
         self.activation = nn.ELU()
         self.avgpool1 = nn.AvgPool2d((8, 1))
         self.dropout1 = nn.Dropout(dropout)
-        self.conv2 = Conv2dL2(F2, F2, (16 + 1, 1), padding='same', weight_decay=0.009)
+        self.conv2 = Conv2dL2(F2, F2, (16, 1), padding='same', weight_decay=0.009)
         self.bn3 = nn.BatchNorm2d(F2)
         self.avgpool2 = nn.AvgPool2d((pool_size, 1))
         self.dropout2 = nn.Dropout(dropout)
@@ -227,7 +227,7 @@ class StableTransformerBlock(nn.Module):
         config = LlamaConfig(
             hidden_size=embed_dim,
             intermediate_size=embed_dim,
-            num_hidden_layers=2,
+            num_hidden_layers=2, 
             num_attention_heads=num_heads,
             num_key_value_heads=num_heads,
             max_position_embeddings=500,
@@ -333,7 +333,7 @@ class EEGEncoderModel(BaseModel):
         eegn_D: int = 2,
         eegn_kern_size: int = 64,
         eegn_pool_size: int = 7,
-        eegn_dropout: float = 0.3,
+        eegn_dropout: float = 0.5,
         tcn_depth: int = 2,
         tcn_kernel_size: int = 4,
         tcn_filters: int = 32,
@@ -390,6 +390,8 @@ class EEGEncoderModel(BaseModel):
             batch_size=self.batch_size,
             lr=self.lr,
             l2_scale=2.0,
+            loss_scale=2.0,
+            label_smoothing=0.2,
             callbacks=callbacks if callbacks is not None else [LoggerCallback(every_n_epochs=10)],
         )
 

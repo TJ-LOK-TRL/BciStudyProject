@@ -97,6 +97,7 @@ class ShallowConvNet(BaseModel):
         self.batch_size = batch_size
         self.dropout = dropout
         self._device_str = device if device else ('cuda' if torch.cuda.is_available() else 'cpu')
+        self.callbacks = callbacks
         self.device = torch.device(self._device_str)
         self._label_encoder = LabelEncoder()
         self.model = ShallowConvNetArchitecture(
@@ -161,7 +162,8 @@ class ShallowConvNet(BaseModel):
             n_epochs=self.n_epochs,
             batch_size=self.batch_size,
             dropout=self.dropout,
-            device=self._device_str
+            device=self._device_str,
+            callbacks=[cl.clone() for cl in self.callbacks]
         )
 
     def save(self, path: str) -> None:

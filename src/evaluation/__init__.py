@@ -1,2 +1,2 @@
-from src.evaluation.validation import evaluate_intra_subject, evaluate_cross_subject, evaluate_intra_subject_fixed_split
+from src.evaluation.validation import evaluate_intra_subject, evaluate_cross_subject, evaluate_intra_subject_fixed_split, evaluate_session_split
 from src.evaluation.metrics import compute_metrics

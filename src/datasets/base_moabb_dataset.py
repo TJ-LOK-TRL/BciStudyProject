@@ -42,6 +42,7 @@ class BaseMoabbMiDataset(BaseMoabbDataset):
         tmin: float, 
         tmax: float,
         events: Optional[List[str]] = None,
+        channels: Optional[List[str]] = None,
     ):
         self.tmin = tmin
         self.tmax = tmax
@@ -53,5 +54,6 @@ class BaseMoabbMiDataset(BaseMoabbDataset):
             resample=self.resample,
             tmin=self.tmin,
             tmax=self.tmax,
+            channels=channels,
         )
         super().__init__(moabb_dataset, paradigm, subject_ids)
