@@ -14,12 +14,19 @@ class BNCICompIII3a(BaseMoabbMiDataset):
 
     CLASS_NAMES: List[str] = ['left_hand', 'right_hand']
 
+    EEG_AND_EOG_CHANNELS: List[str] = [
+        'C3', 'Cz', 'C4',
+        'EOG1', 'EOG2', 'EOG3',
+    ]
+    EOG_INDICES: List[int] = [3, 4, 5]
+
     def __init__(
         self,
         subject_ids: Optional[List[int]] = None,
         tmin: float = 0.0,
         tmax: float = 4.5,
         resample: float = 250.0,
+        include_eog: bool = False,
     ):
         super().__init__(
             moabb_dataset=BNCI2014_004(),
@@ -27,6 +34,7 @@ class BNCICompIII3a(BaseMoabbMiDataset):
             resample=resample,
             tmin=tmin,
             tmax=tmax,
+            channels=self.EEG_AND_EOG_CHANNELS if include_eog else None,
         )
 
     @property

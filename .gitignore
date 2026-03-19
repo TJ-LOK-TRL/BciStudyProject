@@ -11,12 +11,18 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+*.pyc
 
 # Ambientes virtuais e logs
 venvs/
+.venv/
+.env
 *.log
+reports/*.html
 
 # Outros
 .DS_Store
-
 githubs/
+runs/
+optuna_studies/*.db
+*.ipynb_checkpoints

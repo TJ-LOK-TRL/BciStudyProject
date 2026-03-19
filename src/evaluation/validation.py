@@ -2,8 +2,9 @@ import numpy as np
 from pathlib import Path
 from sklearn.model_selection import StratifiedKFold, train_test_split
 from src.evaluation.results import EvaluationResult, EvaluationType
-from src.models.base_model import BaseModel
-from src.training.callbacks import CheckpointCallback
+from src.models.core.fittable import IFittable
+from src.models.wrappers.nn_wrapper import NNWrapper
+from src.training.callbacks.callbacks import CheckpointCallback
 from src.training.trainer import Trainer
 from typing import Optional
 import torch
@@ -11,20 +12,18 @@ import torch
 
 # ─── helpers ─────────────────────────────────────────────────────────────────
 
-def _get_checkpoint_dir(model: BaseModel) -> Optional[str]:
-    """Extract checkpoint_dir from model callbacks if available."""
-    if not hasattr(model, '_trainer'):
+def _get_checkpoint_dir(model: IFittable) -> Optional[str]:
+    """Extract checkpoint_dir from NNWrapper trainer if available."""
+    if not isinstance(model, NNWrapper):
         return None
-    trainer: Trainer = model._trainer
-    for cb in trainer.callbacks:
-        if isinstance(cb, CheckpointCallback):
-            return str(cb.checkpoint_dir)
-    return None
+    if model._trainer.checkpoint_dir is None:
+        return None
+    return str(model._trainer.checkpoint_dir)
 
 
-def _set_run_id(model: BaseModel, run_id: str, checkpoint_dir: Optional[str]) -> None:
-    """Set run_id on trainer if model has one — enables per-run checkpointing."""
-    if checkpoint_dir and hasattr(model, '_trainer'):
+def _set_run_id(model: IFittable, run_id: str, checkpoint_dir: Optional[str]) -> None:
+    """Set run_id on trainer if model is NNWrapper — enables per-run checkpointing."""
+    if checkpoint_dir and isinstance(model, NNWrapper):
         model._trainer.checkpoint_dir = Path(checkpoint_dir)
         model._trainer.set_run_id(run_id)
 
@@ -70,7 +69,7 @@ def _apply_scaling(
 # ─── core execution engine ───────────────────────────────────────────────────
 
 def _execute_run(
-    model: BaseModel,
+    model: IFittable,
     X_train: np.ndarray,
     y_train: np.ndarray,
     X_test: np.ndarray,
@@ -80,11 +79,7 @@ def _execute_run(
     validation_ratio: float = 0.2,
     apply_scaling: bool = False,
     save_model: bool = True,
-) -> tuple[float, BaseModel]:
-    """
-    Central execution engine.
-    Returns (score, fitted_model) — caller decides whether to keep the model.
-    """
+) -> tuple[float, IFittable]:
     done_score = _is_done(run_id, save_dir)
     if done_score is not None:
         print(f'    Skipping {run_id} — already done (score: {done_score:.3f})')
@@ -112,8 +107,10 @@ def _execute_run(
     score = float(np.mean(preds == y_test))
 
     _mark_done(run_id, save_dir, score)
+
     if save_dir and save_model:
-        cloned.save(f'{save_dir}/{run_id}.pt')
+        ext = 'pt' if isinstance(cloned, NNWrapper) else 'pkl'
+        cloned.save(f'{save_dir}/{run_id}.{ext}')
 
     return score, cloned
 
@@ -121,7 +118,7 @@ def _execute_run(
 # ─── evaluation functions ─────────────────────────────────────────────────────
 
 def evaluate_intra_subject(
-    model: BaseModel,
+    model: IFittable,
     X: np.ndarray,
     y: np.ndarray,
     subject_ids: np.ndarray,
@@ -174,7 +171,7 @@ def evaluate_intra_subject(
 
 
 def evaluate_cross_subject(
-    model: BaseModel,
+    model: IFittable,
     X: np.ndarray,
     y: np.ndarray,
     subject_ids: np.ndarray,
@@ -207,7 +204,7 @@ def evaluate_cross_subject(
 
 
 def evaluate_intra_subject_fixed_split(
-    model: BaseModel,
+    model: IFittable,
     X: np.ndarray,
     y: np.ndarray,
     subject_ids: np.ndarray,
@@ -248,7 +245,7 @@ def evaluate_intra_subject_fixed_split(
 
 
 def evaluate_session_split(
-    model: BaseModel,
+    model: IFittable,
     X: np.ndarray,
     y: np.ndarray,
     subject_ids: np.ndarray,

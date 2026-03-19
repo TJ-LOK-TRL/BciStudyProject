@@ -1,0 +1,38 @@
+# Configuração base do pipeline
+seed: 42
+project_name: eeg-ai
+
+# Dados
+dataset: motor_imagery  # [imagined_words, motor_imagery, clinical_states]
+root_data: data
+sampling_rate: 250
+window_size: 500    # amostras (p.ex. 2 s @ 250 Hz)
+overlap: 0.5        # 50%
+channels: null      # lista opcional para mapear canais
+
+# Pré-processamento
+preprocess:
+  notch: 50
+  bandpass: [0.5, 40.0]
+  reref: CAR
+  normalize: zscore_session
+
+# Treino
+training:
+  model: lstm       # [lstm, gru, cnn1d, liquid]
+  epochs: 50
+  batch_size: 64
+  lr: 0.001
+  weight_decay: 0.0001
+  early_stopping_patience: 10
+  scheduler: cosine # [none, cosine, step]
+
+# Avaliação
+metrics:
+  primary: f1_macro
+  extras: [accuracy, kappa, mcc, roc_auc_ovr, pr_auc_macro, ece, brier, log_loss]
+
+# Splits
+splits:
+  strategy: intra_subject  # [intra_subject, inter_subject, loso]
+  val_ratio: 0.2

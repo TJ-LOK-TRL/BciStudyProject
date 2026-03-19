@@ -10,19 +10,16 @@ from sklearn.model_selection import GridSearchCV
 import joblib
 from pathlib import Path
 
-from src.models.base_model import BaseModel
+from src.models.core.fittable import IFittable
+from src.models.core.hyperparametrizable import IHyperparametrizable
 
-class RiemannianSVM(BaseModel):
+
+class RiemannianSVM(IFittable, IHyperparametrizable):
     """
     Covariance + Tangent Space + SVM classifier.
-
-    Expects X with shape (n_trials, n_bands, n_channels, n_times).
+    band_mode=True:  expects (n_trials, n_bands, n_channels, n_times)
+    band_mode=False: expects (n_trials, n_channels, n_times)
     Filter bank preprocessing must be applied upstream (FilterBankTransform).
-
-    Responsibilities:
-        - Fit/transform Covariances and TangentSpace per band
-        - Concatenate tangent vectors across bands
-        - GridSearchCV over SelectKBest + SVC pipeline
     """
 
     def __init__(
@@ -30,7 +27,7 @@ class RiemannianSVM(BaseModel):
         n_jobs: int = -1,
         cv: int = 5,
         param_grid: Optional[dict] = None,
-        band_mode: bool = True, # TODO: Improve in the future the overall struct to be more modular
+        band_mode: bool = True,
     ):
         super().__init__()
         self.n_jobs = n_jobs
@@ -42,125 +39,82 @@ class RiemannianSVM(BaseModel):
             'svc__gamma': ['scale'],
         }
         self.model: Optional[GridSearchCV] = None
-        self._cov_ts_list: Optional[List] = None  # fitted (Covariances, TangentSpace) per band
+        self._cov_ts_list: Optional[List] = None
         self.band_mode = band_mode
 
-    def _extract_features(
-        self,
-        X: np.ndarray,
-        fit: bool = False,
-    ) -> np.ndarray:
-        """
-        Compute covariance matrices and project to tangent space per band.
-
-        Args:
-            X:   shape (n_trials, n_bands, n_channels, n_times)
-            fit: if True, fit Covariances and TangentSpace objects;
-                 if False, use already-fitted objects from self._cov_ts_list
-
-        Returns:
-            features: shape (n_trials, n_bands * tangent_dim)
-        """
+    def _extract_features(self, X: np.ndarray, fit: bool = False) -> np.ndarray:
         if self.band_mode:
             n_trials, n_bands, n_channels, n_times = X.shape
             features = []
             cov_ts_list = []
-
             for i in range(n_bands):
-                X_band = X[:, i, :, :].astype(np.float64)  # (n_trials, n_channels, n_times)
-
+                X_band = X[:, i, :, :].astype(np.float64)
                 cov = Covariances('oas')
                 ts = TangentSpace()
-
                 if fit:
                     feat = ts.fit_transform(cov.fit_transform(X_band))
                     cov_ts_list.append((cov, ts))
                 else:
                     cov_fitted, ts_fitted = self._cov_ts_list[i]
                     feat = ts_fitted.transform(cov_fitted.transform(X_band))
-
                 features.append(feat)
-
             if fit:
                 self._cov_ts_list = cov_ts_list
-
-            return np.concatenate(features, axis=1)  # (n_trials, n_bands * tangent_dim)
+            return np.concatenate(features, axis=1)
         else:
-            # single band — (n_trials, n_channels, n_times)
             X_64 = X.astype(np.float64)
             cov = Covariances('oas')
             ts = TangentSpace()
-
             if fit:
                 feat = ts.fit_transform(cov.fit_transform(X_64))
                 self._cov_ts_list = [(cov, ts)]
             else:
                 cov_fitted, ts_fitted = self._cov_ts_list[0]
                 feat = ts_fitted.transform(cov_fitted.transform(X_64))
-
             return feat
 
     def fit(self, X: np.ndarray, y: np.ndarray, **kwargs) -> None:
-        """
-        Fit the full pipeline.
-
-        Args:
-            X: shape (n_trials, n_bands, n_channels, n_times)
-            y: shape (n_trials,)
-        """
         X_feat = self._extract_features(X, fit=True)
-
         pipe = Pipeline([
             ('scaler', StandardScaler()),
             ('select', SelectKBest(f_classif)),
             ('svc', SVC()),
         ])
-
         self.model = GridSearchCV(
-            pipe,
-            self.param_grid,
-            cv=self.cv,
-            n_jobs=self.n_jobs,
-            verbose=0,
+            pipe, self.param_grid,
+            cv=self.cv, n_jobs=self.n_jobs, verbose=0,
         )
         self.model.fit(X_feat, y)
         self.is_fitted = True
         print(f'    Best params: {self.model.best_params_}')
 
     def predict(self, X: np.ndarray) -> np.ndarray:
-        """
-        Predict class labels.
-
-        Args:
-            X: shape (n_trials, n_bands, n_channels, n_times)
-
-        Returns:
-            y_pred: shape (n_trials,)
-        """
         if not self.is_fitted:
             raise RuntimeError('Model is not fitted yet, call fit() first')
-        X_feat = self._extract_features(X, fit=False)
-        return self.model.predict(X_feat)
+        return self.model.predict(self._extract_features(X, fit=False))
 
     def clone(self) -> 'RiemannianSVM':
         return RiemannianSVM(
             n_jobs=self.n_jobs,
             cv=self.cv,
             param_grid=self.param_grid,
-            band_mode=self.band_mode
+            band_mode=self.band_mode,
         )
+
+    def get_hyperparams(self) -> dict:
+        return {
+            'n_jobs':     self.n_jobs,
+            'cv':         self.cv,
+            'param_grid': self.param_grid,
+            'band_mode':  self.band_mode,
+        }
 
     def save(self, path: str) -> None:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         joblib.dump({
-            'model': self.model,
+            'model':       self.model,
             'cov_ts_list': self._cov_ts_list,
-            'hyperparams': {
-                'n_jobs': self.n_jobs,
-                'cv': self.cv,
-                'param_grid': self.param_grid,
-                'band_mode': self.band_mode,
-            }
+            'hyperparams': self.get_hyperparams(),
         }, path)
         print(f'  Model saved to {path}')
 

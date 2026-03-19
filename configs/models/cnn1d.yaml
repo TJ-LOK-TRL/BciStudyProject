@@ -1,0 +1,4 @@
+model: cnn1d
+filters: [64, 128]
+kernels: [7, 5]
+dropout: 0.2

@@ -1,0 +1,5 @@
+dataset: motor_imagery
+classes: ["left_hand", "right_hand", "feet", "tongue"]
+window_size: 500
+overlap: 0.5
+bandpass: [8.0, 30.0]

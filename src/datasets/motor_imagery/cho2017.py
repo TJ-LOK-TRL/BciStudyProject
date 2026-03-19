@@ -20,6 +20,7 @@ class Cho2017(BaseMoabbMiDataset):
         tmin: float = 0.0,
         tmax: float = 3.0,
         resample: float = 250.0,
+        **kwargs,
     ):
         super().__init__(
             moabb_dataset=MOABBCho2017(),
@@ -27,6 +28,7 @@ class Cho2017(BaseMoabbMiDataset):
             resample=resample,
             tmin=tmin,
             tmax=tmax,
+            **kwargs
         )
 
     @property

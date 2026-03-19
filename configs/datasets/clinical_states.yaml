@@ -1,0 +1,6 @@
+dataset: clinical_states
+classes: ["control", "mdd"]
+window_size: 500
+overlap: 0.5
+bandpass: [0.5, 40.0]
+split: loso

@@ -1,0 +1,5 @@
+dataset: imagined_words
+classes: ["up", "down", "left", "right"]
+window_size: 500
+overlap: 0.5
+bandpass: [0.5, 40.0]

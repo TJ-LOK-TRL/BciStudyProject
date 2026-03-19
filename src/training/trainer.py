@@ -1,13 +1,16 @@
 # src/training/trainer.py
 
+import torch
+import torch.nn as nn
 from typing import Optional, List, Dict, Type
 from pathlib import Path
 import numpy as np
-import torch
-import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import LabelEncoder
-from src.training.callbacks import Callback, EarlyStoppingCallback, CheckpointCallback
+from src.training.callbacks.callbacks import Callback, EarlyStoppingCallback, CheckpointCallback
+from src.training.schedulers import build_scheduler
+from src.training.trainer_config import TrainerConfig
+from src.training.optimizers import build_optimizer
 
 
 class Trainer:
@@ -17,40 +20,54 @@ class Trainer:
     Loss:
         train_loss = loss_scale * CrossEntropy(label_smoothing) + l2_scale * manual_L2
         val_loss   = CrossEntropy(no smoothing, no L2)
-
-    Gradient clipping is applied before every optimizer step to prevent
-    loss spikes / gradient explosion (especially with GRU + Transformer).
     """
 
     def __init__(
         self,
         model_arch: nn.Module,
         device: torch.device,
-        n_epochs: int = 200,
-        batch_size: int = 64,
-        lr: float = 1e-3,
-        label_smoothing: float = 0.0,
-        loss_scale: float = 1.0,
-        l2_scale: float = 0.0,
-        grad_clip: float = 0.0,       # max gradient norm - set 0 to disable
-        optimizer_cls: Type[torch.optim.Optimizer] = torch.optim.Adam,
-        optimizer_kwargs: Optional[Dict] = None,
-        callbacks: Optional[List[Callback]] = None,
-        checkpoint_dir: Optional[str] = None,
+        config: TrainerConfig,
     ):
         self.model_arch = model_arch
         self.device = device
-        self.n_epochs = n_epochs
-        self.batch_size = batch_size
-        self.lr = lr
-        self.label_smoothing = label_smoothing
-        self.loss_scale = loss_scale
-        self.l2_scale = l2_scale
-        self.grad_clip = grad_clip
-        self.optimizer_cls = optimizer_cls
-        self.optimizer_kwargs = optimizer_kwargs or {}
-        self.callbacks = callbacks or []
-        self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir else None
+        self.cfg = config
+        self.callbacks = self._build_callbacks()    
+        self.checkpoint_dir = (
+            Path(config.checkpoint.checkpoint_dir) if config.checkpoint else None
+        )
+
+    def _build_callbacks(self) -> List[Callback]:
+        from src.training.callbacks import (
+            LoggerCallback,
+            EarlyStoppingCallback,
+            BestModelCallback,
+            CheckpointCallback,
+        )
+        callbacks = []
+
+        if self.cfg.logger is not None:
+            callbacks.append(LoggerCallback(
+                every_n_epochs=self.cfg.logger.every_n_epochs,
+                metrics=self.cfg.logger.metrics,
+            ))
+        if self.cfg.early_stopping is not None:
+            callbacks.append(EarlyStoppingCallback(
+                patience=self.cfg.early_stopping.patience,
+                min_delta=self.cfg.early_stopping.min_delta,
+                monitor=self.cfg.early_stopping.monitor,
+                mode=self.cfg.early_stopping.mode,
+            ))
+        if self.cfg.best_model is not None:
+            callbacks.append(BestModelCallback(
+                monitor=self.cfg.best_model.monitor,
+                mode=self.cfg.best_model.mode,
+            ))
+        if self.cfg.checkpoint is not None:
+            callbacks.append(CheckpointCallback(
+                checkpoint_dir=self.cfg.checkpoint.checkpoint_dir,
+                every_n_epochs=self.cfg.checkpoint.every_n_epochs,
+            ))
+        return callbacks
 
     def _l2_loss(self) -> torch.Tensor:
         total = sum(
@@ -64,7 +81,8 @@ class Trainer:
         return (torch.argmax(logits, dim=1) == y).float().mean().item()
 
     def _to_tensor(self, X: np.ndarray, y: Optional[np.ndarray] = None):
-        X_tensor = torch.FloatTensor(X).unsqueeze(1).to(self.device)
+        adapter = self.cfg.input_adapter
+        X_tensor = adapter.transform(X).to(self.device)
         if y is not None:
             return X_tensor, torch.LongTensor(y).to(self.device)
         return X_tensor, None
@@ -75,7 +93,11 @@ class Trainer:
             if isinstance(cb, CheckpointCallback):
                 cb.set_run_id(run_id)
 
-    def _resume_if_exists(self, optimizer, scaler) -> int:
+    def _resume_if_exists(
+        self, 
+        optimizer: torch.optim.Optimizer, 
+        scaler: torch.amp.GradScaler
+    ) -> int:
         if self.checkpoint_dir is None:
             return 0
         run_id = getattr(self, 'current_run_id', 'default')
@@ -91,31 +113,18 @@ class Trainer:
         return ckpt['epoch'] + 1
 
     def _restore_best_weights(self) -> None:
-        from src.training.callbacks import EarlyStoppingCallback
-        try:
-            from src.training.callbacks import BestModelCallback
-        except ImportError:
-            BestModelCallback = None
-
+        from src.training.callbacks.callbacks import BestModelCallback
         for cb in self.callbacks:
-            if isinstance(cb, EarlyStoppingCallback) and cb.best_state is not None:
-                print(f'  Restoring best weights (val_loss: {cb.best_val_loss:.4f})')
+            if isinstance(cb, (EarlyStoppingCallback, BestModelCallback)) and cb.best_state is not None:
+                print(
+                    f'  Restoring best weights '
+                    f'(epoch {getattr(cb, "best_epoch", "?")}, '
+                    f'{cb.monitor}: {cb._best_value:.4f})'
+                )
                 self.model_arch.load_state_dict(
                     {k: v.to(self.device) for k, v in cb.best_state.items()}
                 )
                 return
-
-        if BestModelCallback is not None:
-            for cb in self.callbacks:
-                if isinstance(cb, BestModelCallback) and cb.best_state is not None:
-                    print(
-                        f'  Restoring best weights '
-                        f'(epoch {cb.best_epoch}, {cb.monitor}: {cb._best_value:.4f})'
-                    )
-                    self.model_arch.load_state_dict(
-                        {k: v.to(self.device) for k, v in cb.best_state.items()}
-                    )
-                    return
 
     def fit(
         self,
@@ -131,7 +140,7 @@ class Trainer:
         X_tensor, y_tensor = self._to_tensor(X_train, y_train)
         loader = DataLoader(
             TensorDataset(X_tensor, y_tensor),
-            batch_size=self.batch_size,
+            batch_size=self.cfg.batch_size,
             shuffle=True,
         )
 
@@ -139,13 +148,22 @@ class Trainer:
         if use_val:
             X_val_tensor, y_val_tensor = self._to_tensor(X_val, y_val)
 
-        optimizer = self.optimizer_cls(
+        optimizer = build_optimizer(
             self.model_arch.parameters(),
-            lr=self.lr,
-            **self.optimizer_kwargs,
+            name=self.cfg.optimizer,
+            lr=self.cfg.lr,
+            weight_decay=self.cfg.weight_decay,
+            **self.cfg.optimizer_kwargs,
         )
 
-        train_criterion = nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)
+        # build scheduler
+        scheduler = build_scheduler(
+            optimizer,
+            self.cfg.scheduler,
+            T_max=self.cfg.n_epochs,
+        )
+
+        train_criterion = nn.CrossEntropyLoss(label_smoothing=self.cfg.label_smoothing)
         val_criterion   = nn.CrossEntropyLoss()
 
         is_cuda = self.device.type == 'cuda'
@@ -153,10 +171,7 @@ class Trainer:
 
         start_epoch = self._resume_if_exists(optimizer, scaler)
 
-        # debug on first epoch only
-        _debug_done = False
-
-        for epoch in range(start_epoch, self.n_epochs):
+        for epoch in range(start_epoch, self.cfg.n_epochs):
             self.model_arch.train()
             train_loss, train_acc = 0.0, 0.0
 
@@ -164,16 +179,16 @@ class Trainer:
                 optimizer.zero_grad()
                 with torch.amp.autocast('cuda', enabled=is_cuda):
                     logits = self.model_arch(X_batch)
-                    l2_loss = self.l2_scale * self._l2_loss()
-                    loss = self.loss_scale * train_criterion(logits, y_batch) + l2_loss
+                    l2_loss = self.cfg.l2_scale * self._l2_loss()
+                    loss = self.cfg.loss_scale * train_criterion(logits, y_batch) + l2_loss
 
                 scaler.scale(loss).backward()
 
-                # gradient clipping — prevents loss spikes in GRU/Transformer models
-                if self.grad_clip > 0:
+                if self.cfg.grad_clip > 0:
                     scaler.unscale_(optimizer)
                     torch.nn.utils.clip_grad_norm_(
-                        self.model_arch.parameters(), max_norm=self.grad_clip
+                        self.model_arch.parameters(),
+                        max_norm=self.cfg.grad_clip,
                     )
 
                 scaler.step(optimizer)
@@ -194,18 +209,13 @@ class Trainer:
                         val_acc  = self._compute_accuracy(val_logits, y_val_tensor)
                 self.model_arch.train()
 
-            if not _debug_done:
-                with torch.no_grad():
-                    sample = next(iter(loader))
-                    _logits = self.model_arch(sample[0])
-                    _ce  = train_criterion(_logits, sample[1]).item()
-                    _l2  = self._l2_loss().item()
-                print(
-                    f'  DEBUG epoch 0 — '
-                    f'CE: {_ce:.4f}, L2: {_l2:.4f}, '
-                    f'l2_scale: {self.l2_scale}'
-                )
-                _debug_done = True
+            # scheduler step
+            if scheduler is not None:
+                if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                    if use_val and val_loss is not None:
+                        scheduler.step(val_loss)
+                else:
+                    scheduler.step()
 
             logs: Dict = {
                 'train_loss':      train_loss,

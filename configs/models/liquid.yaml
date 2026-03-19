@@ -1,0 +1,4 @@
+model: liquid
+hidden: 128
+tau_init: 0.5
+activation: tanh

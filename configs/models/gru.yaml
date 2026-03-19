@@ -1,0 +1,5 @@
+model: gru
+hidden: 128
+layers: 2
+bidirectional: true
+dropout: 0.2
