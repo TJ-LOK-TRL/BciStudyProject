@@ -12,6 +12,14 @@ import torch
 
 # ─── helpers ─────────────────────────────────────────────────────────────────
 
+def _get_model_name(model: IFittable) -> str:
+    """Get a stable model name for run_id — uses arch name for NNWrapper."""
+    from src.models.wrappers.nn_wrapper import NNWrapper
+    if isinstance(model, NNWrapper):
+        return model.model.__class__.__name__  # EEGEncoderModel, ShallowConvNet, etc.
+    return model.__class__.__name__            # CSPLDAModel, RiemannianSVM, etc.
+
+
 def _get_checkpoint_dir(model: IFittable) -> Optional[str]:
     """Extract checkpoint_dir from NNWrapper trainer if available."""
     if not isinstance(model, NNWrapper):
@@ -139,7 +147,7 @@ def evaluate_intra_subject(
 
         for fold, (train_idx, test_idx) in enumerate(skf.split(X_subj, y_subj)):
             print(f'  Subject {i+1}/{len(unique_subjects)} fold {fold+1}/{n_splits}...', flush=True)
-            run_id = f'{model.__class__.__name__}_subject{subj}_fold{fold}'
+            run_id = f'{_get_model_name(model)}_subject{subj}_fold{fold}'
 
             score, fitted = _execute_run(
                 model, X_subj[train_idx], y_subj[train_idx],
@@ -157,7 +165,7 @@ def evaluate_intra_subject(
         # guarda só o melhor fold por sujeito
         if save_dir and best_fold_model is not None:
             best_fold_model.save(
-                f'{save_dir}/{model.__class__.__name__}_subject{subj}_best.pt'
+                f'{save_dir}/{_get_model_name(model)}_subject{subj}_best.pt'
             )
 
         subject_scores[int(subj)] = float(np.mean(fold_scores))
@@ -184,7 +192,7 @@ def evaluate_cross_subject(
 
     for i, subj in enumerate(unique_subjects):
         print(f'  Cross-subject LOSO: subject {i+1}/{len(unique_subjects)}...', flush=True)
-        run_id = f'{model.__class__.__name__}_loso_subject{subj}'
+        run_id = f'{_get_model_name(model)}_loso_subject{subj}'
 
         test_mask = subject_ids == subj
         score, _ = _execute_run(
@@ -218,7 +226,7 @@ def evaluate_intra_subject_fixed_split(
 
     for i, subj in enumerate(unique_subjects):
         print(f'  Intra-subject fixed split: subject {i+1}/{len(unique_subjects)}...', flush=True)
-        run_id = f'{model.__class__.__name__}_subject{subj}_fixed'
+        run_id = f'{_get_model_name(model)}_subject{subj}_fixed'
 
         mask = subject_ids == subj
         X_subj, y_subj = X[mask], y[mask]
@@ -262,7 +270,7 @@ def evaluate_session_split(
     for i, subj in enumerate(unique_subjects):
         print(f'  Session split: subject {i+1}/{len(unique_subjects)}...', flush=True)
         # fix 4 — run_id inclui as sessões para evitar conflito de cache
-        run_id = f'{model.__class__.__name__}_subject{subj}_{train_session}_vs_{test_session}'
+        run_id = f'{_get_model_name(model)}_subject{subj}_{train_session}_vs_{test_session}'
 
         subj_mask = subject_ids == subj
         train_mask = subj_mask & (session_ids == train_session)

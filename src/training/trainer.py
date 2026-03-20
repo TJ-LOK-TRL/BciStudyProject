@@ -170,6 +170,7 @@ class Trainer:
         scaler = torch.amp.GradScaler('cuda', enabled=is_cuda)
 
         start_epoch = self._resume_if_exists(optimizer, scaler)
+        _debug_done = False
 
         for epoch in range(start_epoch, self.cfg.n_epochs):
             self.model_arch.train()
@@ -216,6 +217,20 @@ class Trainer:
                         scheduler.step(val_loss)
                 else:
                     scheduler.step()
+
+            if not _debug_done:
+                with torch.no_grad():
+                    sample = next(iter(loader))
+                    _logits = self.model_arch(sample[0])
+                    _ce  = train_criterion(_logits, sample[1]).item()
+                    _l2  = self._l2_loss().item()
+                print(
+                    f'  DEBUG epoch 0 — '
+                    f'CE: {_ce:.4f}, L2: {_l2:.4f}, '
+                    f'l2_scale: {self.cfg.l2_scale}, '
+                    f'scheduler: {self.cfg.scheduler}'
+                )
+                _debug_done = True
 
             logs: Dict = {
                 'train_loss':      train_loss,

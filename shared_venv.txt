@@ -1,0 +1,31 @@
+correr apenas uma vez:
+    echo "alias eeg_conda='conda deactivate; source /opt/bci_eeg_conda/miniconda3/etc/profile.d/conda.sh'" >> ~/.bashrc
+    source ~/.bashrc
+e depois apenas isto correr sempre:
+    eeg_conda
+
+
+pips usados:
+    pip install mne
+    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+    pip install -e .
+    pip install scikit-learn
+    pip install transformers accelerate
+    pip install pyriemann
+    pip install dacite
+    pip install moabb
+
+
+
+comandos usado:
+    # Crie a estrutura profissional
+    sudo groupadd bci_eeg_team
+    sudo usermod -a -G bci_eeg_team tyrese
+    sudo usermod -a -G bci_eeg_team salvador
+
+    sudo mkdir -p /opt/bci_eeg_conda
+    sudo chgrp -R bci_eeg_team /opt/bci_eeg_conda
+    sudo chmod -R 770 /opt/bci_eeg_conda
+
+    sudo find /opt/bci_eeg_conda -type d -exec chmod g+s {} +    
+    #sudo chmod g+s /opt/bci_eeg_conda
