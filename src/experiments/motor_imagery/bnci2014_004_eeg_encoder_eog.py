@@ -66,28 +66,56 @@ class BNCI2014004EEGEncoderEOGExperiment(BaseExperiment):
         X = remover.fit_transform(X)
         return X, y, subject_ids
 
-    def build_model(self) -> NNWrapper:
+    def build_model(self,
+                    eegn_kern_size: int = 65,
+                    n_epochs: int = 200,
+                    l2_scale: float = 2.0,
+                    loss_scale: float = 2.0,
+                    label_smoothing: float = 0.2,
+                    lr: float = 1e-3,     
+                    patience: int = 50
+                        
+                        ) -> NNWrapper:
+        
+        print(f"NO BUILD_MODEL: LABEL > {label_smoothing}")
         return NNWrapper(
             arch=EEGEncoderModel(
                 n_channels=3,
                 n_classes=2,
-                eegn_kern_size=65,
+                eegn_kern_size=eegn_kern_size,
             ),
             config=TrainerConfig(
-                n_epochs=200,
-                l2_scale=2.0,
-                loss_scale=2.0,
-                label_smoothing=0.2,
+                n_epochs=n_epochs,
+                l2_scale=l2_scale,
+                lr=lr,
+                loss_scale=loss_scale,
+                label_smoothing=label_smoothing,
                 logger=LoggerCallbackConfig(every_n_epochs=10),
-                early_stopping=EarlyStoppingCallbackConfig(patience=50),
+                early_stopping=EarlyStoppingCallbackConfig(patience=patience),
             ),
         )
 
-    def run(self) -> EvaluationResult:
-        X, y, subject_ids = self.prepare_data()
-        model = self.build_model()
+    def run(self, 
+            model = None,
+            X = None,
+            y = None,
+            subject_ids = None,
+            test_ratio: int = 0.2
+            ) -> EvaluationResult:
+        
+        if X is None and y is None and subject_ids is None:
+            X, y, subject_ids = self.prepare_data()
+
+        if model is None:
+            model = self.build_model()
+
+
         result = evaluate_intra_subject_fixed_split(
-            model, X, y, subject_ids, test_ratio=0.2
+            model=model,
+            X=X,
+            y=y,
+            subject_ids=subject_ids,
+            test_ratio=test_ratio
         )
         print(self)
         print(result)

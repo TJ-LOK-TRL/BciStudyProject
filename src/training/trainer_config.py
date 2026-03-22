@@ -36,6 +36,7 @@ class TrainerConfig:
     )
     best_model: Optional[BestModelCallbackConfig] = None      # disabled by default
     checkpoint: Optional[CheckpointCallbackConfig] = None     # disabled by default
+    
 
     def to_dict(self) -> dict:
         from dataclasses import asdict

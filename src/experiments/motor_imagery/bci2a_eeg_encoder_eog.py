@@ -67,35 +67,44 @@ class BCI2aEEGEncoderEOGExperiment(BaseExperiment):
         X = remover.fit_transform(X)
         return X, y, subject_ids
 
-    def build_model(self) -> NNWrapper:
+    def build_model(self, 
+                    eegn_kern_size: int = 64,
+                    lr: float = 1e-3,
+                    n_epochs: int = 200,
+                    loss_scale: float = 2.0,
+                    l2_scale: float = 2.0,
+                    label_smoothing: float = 0.2,
+                    patience: int = 50
+                    ) -> NNWrapper:
         return NNWrapper(
             arch=EEGEncoderModel(
                 n_channels=22,
                 n_classes=4,
-                eegn_kern_size=64,
+                eegn_kern_size = eegn_kern_size,
             ),
             config=TrainerConfig(
-                n_epochs=200,
-                l2_scale=2.0,
-                loss_scale=2.0,
-                label_smoothing=0.2,
+                lr=lr,
+                n_epochs=n_epochs,
+                l2_scale=l2_scale,
+                loss_scale=loss_scale,
+                label_smoothing=label_smoothing,
                 grad_clip=0.0,
                 input_adapter=CNN2DAdapter(),
                 logger=LoggerCallbackConfig(every_n_epochs=10),
-                early_stopping=EarlyStoppingCallbackConfig(patience=50),
+                early_stopping=EarlyStoppingCallbackConfig(patience=patience),
             ),
         )
 
-    def run(self) -> EvaluationResult:
-        X, y, subject_ids = self.prepare_data()
-        model = self.build_model()
+    def run(self, model=None, X=None, y=None, subject_ids=None, test_ratio: int = 0.2) -> EvaluationResult:
+        #X, y, subject_ids = self.prepare_data()
+        #model = self.build_model()
 
         result = evaluate_intra_subject_fixed_split(
             model=model,
             X=X,
             y=y,
             subject_ids=subject_ids,
-            test_ratio=0.2,
+            test_ratio=test_ratio,
             #save_dir='results/models/bci2a_eeg_encoder_eog',
         )
         print(self)
