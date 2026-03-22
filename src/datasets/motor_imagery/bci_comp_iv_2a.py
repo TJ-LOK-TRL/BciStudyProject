@@ -14,7 +14,7 @@ class BCICompIV2a(BaseMoabbMiDataset):
     Loaded via MOABB (BNCI2014_001).
     """
 
-    CLASS_NAMES: List[str] = ['left_hand', 'right_hand', 'tongue', 'foot']
+    CLASS_NAMES: List[str] = ['left_hand', 'right_hand', 'tongue', 'feet']
 
     EEG_AND_EOG_CHANNELS = [
         'Fz','FC3','FC1','FCz','FC2','FC4','C5','C3','C1','Cz','C2','C4','C6',

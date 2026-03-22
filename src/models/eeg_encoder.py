@@ -1,11 +1,10 @@
 from typing import Literal
 import torch
-from src.models.core.hyperparametrizable import IHyperparametrizable
 from src.models.nn.architectures.eeg_encoder_architecture import EEGEncoderArchitecture
 from src.models.nn.base_neural_model import BaseNN
 
 
-class EEGEncoderModel(BaseNN, IHyperparametrizable):
+class EEGEncoderModel(BaseNN):
     """
     EEGEncoder model.
     Owns the architecture and its hyperparams.

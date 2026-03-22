@@ -9,7 +9,20 @@ authors = [{name = "Equipa EEG-AI"}]
 description = "AI platform for EEG signal processing"
 requires-python = ">=3.10"
 # TODO: List all required packages (mne, torch, numpy, etc.) here after validation
-dependencies = [] 
+dependencies = [
+    "mne",
+    "scikit-learn",
+    "pyriemann",
+    "dacite",
+    "moabb",
+    "transformers",
+    "accelerate",
+] 
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests that require external datasets (deselect with '-m not slow')",
+]
 
 [tool.setuptools.packages.find]
 # Start searching from the current directory

@@ -1,18 +1,18 @@
-from typing import Optional, Literal
+from typing import Optional, Literal, Dict
 from pathlib import Path
 import importlib
 import numpy as np
 import torch
 from sklearn.preprocessing import LabelEncoder
 
-from src.models.core.fittable import IFittable
+from src.models.core import ITrainableModel
 from src.models.nn.base_neural_model import BaseNN
 from src.models.core.hyperparametrizable import IHyperparametrizable
 from src.training.trainer import Trainer
 from src.training.trainer_config import TrainerConfig
 
 
-class NNWrapper(IFittable):
+class NNWrapper(ITrainableModel):
     """
     Generic wrapper — pairs any BaseNN with a Trainer.
     Handles: fit, predict, clone, save, load, label encoding.
@@ -124,6 +124,24 @@ class NNWrapper(IFittable):
 
     def score(self, X: np.ndarray, y: np.ndarray) -> float:
         return float(np.mean(self.predict(X) == y))
+
+    @property
+    def name(self) -> str:
+        return self.model.__class__.__name__
+
+    def get_hyperparams(self) -> Dict:
+        return self.model.get_hyperparams()
+
+    @classmethod
+    def from_hyperparams(cls, hyperparams: Dict) -> 'NNWrapper':
+        """
+        NNWrapper cannot be reconstructed from hyperparams alone -
+        use NNWrapper.load(path) instead.
+        """
+        raise NotImplementedError(
+            'NNWrapper.from_hyperparams() is not supported. '
+            'Use NNWrapper.load(path) to reconstruct from disk.'
+        )
 
     def __repr__(self) -> str:
         return (

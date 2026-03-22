@@ -3,9 +3,9 @@ from pathlib import Path
 import numpy as np
 import mne
 
-from src.datasets.base_dataset import BaseDataset
+from src.datasets.base_imaged_speech_dataset import BaseImagedSpeechDataset
 
-class KumarImagedSpeech(BaseDataset):
+class KumarImagedSpeech(BaseImagedSpeechDataset):
     """
     Kumar et al. 2018 — Envisioned Speech Recognition using EEG.
     14 channels, 23 subjects, 128Hz, 10s trials.

@@ -1,0 +1,11 @@
+paradigm,dataset,model,preprocessing,eval_type,subject_split,session_split,accuracy,balanced_accuracy,f1_macro,kappa,mcc,roc_auc,pr_auc,n_subjects,n_classes,seed,notes
+```
+
+**O fluxo de preenchimento:**
+```
+experiment.run()
+    → EvaluationResult (accuracy_mean, per_subject, ...)
+    → compute_metrics(y_true, y_pred, paradigm=...)
+    → preenche results_template.csv  (uma linha por experimento)
+    → preenche report_template.md    (relatório completo)
+    → preenche summary_all_models.csv (uma linha por experimento, colunas resumidas)

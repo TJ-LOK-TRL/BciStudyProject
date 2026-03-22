@@ -1,10 +1,3 @@
-correr apenas uma vez:
-    echo "alias eeg_conda='conda deactivate; source /opt/bci_eeg_conda/miniconda3/etc/profile.d/conda.sh'" >> ~/.bashrc
-    source ~/.bashrc
-e depois apenas isto correr sempre:
-    eeg_conda
-
-
 pips usados:
     pip install mne
     pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
@@ -15,7 +8,9 @@ pips usados:
     pip install dacite
     pip install moabb
 
-
+comandos para todos terem acesso de leitura e "entrar no ficheiro" dos datasets para sempre evitando atualizar sempre que alguem baixa:
+    sudo setfacl -R -m g:bci_eeg_team:rX /data/bci_eeg_data/
+    sudo setfacl -R -d -m g:bci_eeg_team:rX /data/bci_eeg_data/
 
 comandos usado:
     # Crie a estrutura profissional

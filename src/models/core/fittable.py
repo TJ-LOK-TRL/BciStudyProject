@@ -26,26 +26,5 @@ class IFittable(ABC):
     ) -> None:
         pass
 
-    @abstractmethod
-    def predict(self, X: np.ndarray) -> np.ndarray:
-        pass
-
-    @abstractmethod
-    def clone(self) -> 'IFittable':
-        """Return a new unfitted instance with same configuration."""
-        pass
-
-    @abstractmethod
-    def save(self, path: str) -> None:
-        pass
-
-    @classmethod
-    @abstractmethod
-    def load(cls, path: str) -> 'IFittable':
-        pass
-
-    def score(self, X: np.ndarray, y: np.ndarray) -> float:
-        return float(np.mean(self.predict(X) == y))
-
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}(fitted={self.is_fitted})'

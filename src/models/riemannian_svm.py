@@ -10,11 +10,10 @@ from sklearn.model_selection import GridSearchCV
 import joblib
 from pathlib import Path
 
-from src.models.core.fittable import IFittable
-from src.models.core.hyperparametrizable import IHyperparametrizable
+from src.models.core import ITrainableModel
 
 
-class RiemannianSVM(IFittable, IHyperparametrizable):
+class RiemannianSVM(ITrainableModel):
     """
     Covariance + Tangent Space + SVM classifier.
     band_mode=True:  expects (n_trials, n_bands, n_channels, n_times)

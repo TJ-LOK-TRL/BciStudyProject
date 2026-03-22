@@ -1,3 +1,5 @@
+import numpy as np
+import pandas as pd
 from typing import Optional, List
 from moabb.datasets.base import BaseDataset as MOABBBase
 from moabb.paradigms import MotorImagery
@@ -24,7 +26,7 @@ class BaseMoabbDataset(BaseDataset):
             dataset=self._moabb_dataset,
             subjects=self.subject_ids,
         )
-        self.X = X
+        self.X = X.astype(np.float32)
         self.y = y
         self.metadata['n_subjects'] = len(self.subject_ids)
         self.metadata['moabb_metadata'] = metadata
@@ -32,6 +34,19 @@ class BaseMoabbDataset(BaseDataset):
     def preprocess(self) -> None:
         """Placeholder — override in subclass if needed."""
         pass
+
+    @property
+    def subject_ids_array(self) -> np.ndarray:
+        """Per-trial subject IDs from MOABB metadata."""
+        if 'moabb_metadata' not in self.metadata:
+            raise RuntimeError('Call get_data() first.')
+        subjects: pd.Series = self.metadata['moabb_metadata']['subject']
+        return subjects.to_numpy()
+    
+    @property
+    def paradigm(self) -> str:
+        return self._paradigm.__class__.__name__
+
 
 class BaseMoabbMiDataset(BaseMoabbDataset):
     def __init__(
@@ -57,3 +72,7 @@ class BaseMoabbMiDataset(BaseMoabbDataset):
             channels=channels,
         )
         super().__init__(moabb_dataset, paradigm, subject_ids)
+
+    @property
+    def paradigm(self) -> str:
+        return 'MotorImagery'

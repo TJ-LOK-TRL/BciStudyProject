@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from typing import Dict
 
 
 class IHyperparametrizable:
@@ -9,7 +10,7 @@ class IHyperparametrizable:
     """
 
     @abstractmethod
-    def get_hyperparams(self) -> dict:
+    def get_hyperparams(self) -> Dict:
         """
         Return constructor kwargs as a plain dict.
         Must contain everything needed to reconstruct the model via from_hyperparams().
@@ -20,7 +21,7 @@ class IHyperparametrizable:
         pass
 
     @classmethod
-    def from_hyperparams(cls, hyperparams: dict) -> 'IHyperparametrizable':
+    def from_hyperparams(cls, hyperparams: Dict) -> 'IHyperparametrizable':
         """
         Reconstruct instance from saved hyperparams.
         Default calls cls(**hyperparams) — override if construction is more complex.

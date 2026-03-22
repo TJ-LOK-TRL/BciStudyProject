@@ -1,0 +1,1 @@
+date,paradigm,dataset,model,preprocessing,eval_type,subject_split,session_split,test_ratio,val_ratio,n_subjects,n_classes,n_channels,sfreq,accuracy_mean,accuracy_std,balanced_accuracy_mean,balanced_accuracy_std,f1_macro_mean,f1_macro_std,kappa_mean,kappa_std,mcc_mean,mcc_std,top_k_accuracy,roc_auc,pr_auc,brier,ece,chance_level,trainer_config,seed,notes

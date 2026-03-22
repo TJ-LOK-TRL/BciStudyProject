@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
 import torch
 import torch.nn as nn
+from src.models.core import IHyperparametrizable
 
 
-class BaseNN(ABC, nn.Module):
+class BaseNN(nn.Module, IHyperparametrizable, ABC):
     """
     Base for all EEG neural network architectures.
     Enforces forward() implementation.

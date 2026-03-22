@@ -7,11 +7,10 @@ from sklearn.preprocessing import LabelEncoder
 from mne.decoding import CSP
 import joblib
 
-from src.models.core.fittable import IFittable
-from src.models.core.hyperparametrizable import IHyperparametrizable
+from src.models.core import ITrainableModel
 
 
-class CSPLDAModel(IFittable, IHyperparametrizable):
+class CSPLDAModel(ITrainableModel):
     """
     CSP + LDA classifier for Motor Imagery EEG.
     CSP extracts spatial filters, LDA classifies the log-variance features.

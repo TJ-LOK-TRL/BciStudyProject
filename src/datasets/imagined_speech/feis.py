@@ -4,10 +4,10 @@ import zipfile
 import numpy as np
 import pandas as pd
 
-from src.datasets.base_dataset import BaseDataset
+from src.datasets.base_imaged_speech_dataset import BaseImagedSpeechDataset
 
 
-class FEIS(BaseDataset):
+class FEIS(BaseImagedSpeechDataset):
     """
     FEIS: Fourteen-channel EEG with Imagined Speech.
     14 channels (Emotiv EPOC+), 21 English subjects, 16 phonemes, 256Hz.

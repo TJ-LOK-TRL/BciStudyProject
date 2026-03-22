@@ -1,0 +1,2 @@
+dataset,model,subject_id,accuracy,f1_macro,f1_weighted,kappa,mcc,date,paradigm,preprocessing,eval_type,split_type,trainer_config,notes,balanced_accuracy
+BCICompIV2a,CSPLDAModel,all,0.8103,0.8087,0.8087,0.7471,0.7506,2026-03-21,MotorImagery,none,intra_subject,fixed_split,N/A,Test dataset,0.8103

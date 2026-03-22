@@ -1,10 +1,9 @@
 import torch
 from src.models.nn.base_neural_model import BaseNN
-from src.models.core.hyperparametrizable import IHyperparametrizable
 from src.models.nn.architectures.shallow_conv_net_architecture import ShallowConvNetArchitecture
 
 
-class ShallowConvNet(BaseNN, IHyperparametrizable):
+class ShallowConvNet(BaseNN):
     """
     ShallowConvNet model.
     Owns the architecture and its hyperparams.

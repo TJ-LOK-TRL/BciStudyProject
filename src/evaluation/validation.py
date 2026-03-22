@@ -1,26 +1,21 @@
 import numpy as np
 from pathlib import Path
 from sklearn.model_selection import StratifiedKFold, train_test_split
-from src.evaluation.results import EvaluationResult, EvaluationType
-from src.models.core.fittable import IFittable
+from src.evaluation.results import EvaluationResult, EvaluationType, SubjectResult, SplitType
+from src.models.core import ITrainableModel 
 from src.models.wrappers.nn_wrapper import NNWrapper
-from src.training.callbacks.callbacks import CheckpointCallback
-from src.training.trainer import Trainer
-from typing import Optional
+from typing import Optional, Tuple
 import torch
 
 
 # ─── helpers ─────────────────────────────────────────────────────────────────
 
-def _get_model_name(model: IFittable) -> str:
+def _get_model_name(model: ITrainableModel) -> str:
     """Get a stable model name for run_id — uses arch name for NNWrapper."""
-    from src.models.wrappers.nn_wrapper import NNWrapper
-    if isinstance(model, NNWrapper):
-        return model.model.__class__.__name__  # EEGEncoderModel, ShallowConvNet, etc.
-    return model.__class__.__name__            # CSPLDAModel, RiemannianSVM, etc.
+    return model.name
 
 
-def _get_checkpoint_dir(model: IFittable) -> Optional[str]:
+def _get_checkpoint_dir(model: ITrainableModel) -> Optional[str]:
     """Extract checkpoint_dir from NNWrapper trainer if available."""
     if not isinstance(model, NNWrapper):
         return None
@@ -29,7 +24,7 @@ def _get_checkpoint_dir(model: IFittable) -> Optional[str]:
     return str(model._trainer.checkpoint_dir)
 
 
-def _set_run_id(model: IFittable, run_id: str, checkpoint_dir: Optional[str]) -> None:
+def _set_run_id(model: ITrainableModel, run_id: str, checkpoint_dir: Optional[str]) -> None:
     """Set run_id on trainer if model is NNWrapper — enables per-run checkpointing."""
     if checkpoint_dir and isinstance(model, NNWrapper):
         model._trainer.checkpoint_dir = Path(checkpoint_dir)
@@ -77,7 +72,7 @@ def _apply_scaling(
 # ─── core execution engine ───────────────────────────────────────────────────
 
 def _execute_run(
-    model: IFittable,
+    model: ITrainableModel,
     X_train: np.ndarray,
     y_train: np.ndarray,
     X_test: np.ndarray,
@@ -87,11 +82,15 @@ def _execute_run(
     validation_ratio: float = 0.2,
     apply_scaling: bool = False,
     save_model: bool = True,
-) -> tuple[float, IFittable]:
+) -> Tuple[float, np.ndarray, np.ndarray, Optional[ITrainableModel]]:
+    """
+    Central execution engine.
+    Returns (score, y_pred, y_test, fitted_model)
+    """
     done_score = _is_done(run_id, save_dir)
     if done_score is not None:
         print(f'    Skipping {run_id} — already done (score: {done_score:.3f})')
-        return done_score, None
+        return done_score, np.array([]), np.array([]), None
 
     if apply_scaling:
         X_train, X_test = _apply_scaling(X_train, X_test)
@@ -111,8 +110,8 @@ def _execute_run(
     else:
         cloned.fit(X_train, y_train)
 
-    preds = cloned.predict(X_test)
-    score = float(np.mean(preds == y_test))
+    y_pred = cloned.predict(X_test)
+    score = float(np.mean(y_pred == y_test))
 
     _mark_done(run_id, save_dir, score)
 
@@ -120,13 +119,13 @@ def _execute_run(
         ext = 'pt' if isinstance(cloned, NNWrapper) else 'pkl'
         cloned.save(f'{save_dir}/{run_id}.{ext}')
 
-    return score, cloned
+    return score, y_pred, y_test, cloned
 
 
 # ─── evaluation functions ─────────────────────────────────────────────────────
 
 def evaluate_intra_subject(
-    model: IFittable,
+    model: ITrainableModel,
     X: np.ndarray,
     y: np.ndarray,
     subject_ids: np.ndarray,
@@ -137,11 +136,14 @@ def evaluate_intra_subject(
     skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
     unique_subjects = np.unique(subject_ids)
     subject_scores = {}
+    subject_results = {}
+    
 
     for i, subj in enumerate(unique_subjects):
         mask = subject_ids == subj
         X_subj, y_subj = X[mask], y[mask]
         fold_scores = []
+        all_y_true, all_y_pred = [], []
         best_fold_score = 0.0
         best_fold_model = None
 
@@ -149,7 +151,7 @@ def evaluate_intra_subject(
             print(f'  Subject {i+1}/{len(unique_subjects)} fold {fold+1}/{n_splits}...', flush=True)
             run_id = f'{_get_model_name(model)}_subject{subj}_fold{fold}'
 
-            score, fitted = _execute_run(
+            score, y_pred, y_true, fitted = _execute_run(
                 model, X_subj[train_idx], y_subj[train_idx],
                 X_subj[test_idx], y_subj[test_idx],
                 run_id, save_dir,
@@ -157,29 +159,41 @@ def evaluate_intra_subject(
                 save_model=False,   # não guarda todos os folds
             )
             fold_scores.append(score)
+            if len(y_pred) > 0:
+                all_y_true.extend(y_true.tolist())
+                all_y_pred.extend(y_pred.tolist())
 
             if fitted is not None and score > best_fold_score:
                 best_fold_score = score
                 best_fold_model = fitted
 
-        # guarda só o melhor fold por sujeito
+        # save only best fold per subject
         if save_dir and best_fold_model is not None:
             best_fold_model.save(
                 f'{save_dir}/{_get_model_name(model)}_subject{subj}_best.pt'
             )
 
         subject_scores[int(subj)] = float(np.mean(fold_scores))
+        if all_y_true:
+            subject_results[int(subj)] = SubjectResult(
+                subject_id=int(subj),
+                y_true=all_y_true,
+                y_pred=all_y_pred,
+                accuracy=subject_scores[int(subj)],
+            )
 
     return EvaluationResult(
         evaluation=EvaluationType.INTRA_SUBJECT,
+        split_type=SplitType.KFOLD,
         accuracy_mean=float(np.mean(list(subject_scores.values()))),
         accuracy_std=float(np.std(list(subject_scores.values()))),
         per_subject=subject_scores,
+        per_subject_results=subject_results,
     )
 
 
 def evaluate_cross_subject(
-    model: IFittable,
+    model: ITrainableModel,
     X: np.ndarray,
     y: np.ndarray,
     subject_ids: np.ndarray,
@@ -189,13 +203,14 @@ def evaluate_cross_subject(
     """Cross-subject evaluation using Leave-One-Subject-Out (LOSO) protocol."""
     unique_subjects = np.unique(subject_ids)
     subject_scores = {}
+    subject_results = {}
 
     for i, subj in enumerate(unique_subjects):
         print(f'  Cross-subject LOSO: subject {i+1}/{len(unique_subjects)}...', flush=True)
         run_id = f'{_get_model_name(model)}_loso_subject{subj}'
 
         test_mask = subject_ids == subj
-        score, _ = _execute_run(
+        score, y_pred, y_true, _ = _execute_run(
             model, X[~test_mask], y[~test_mask],
             X[test_mask], y[test_mask],
             run_id, save_dir,
@@ -203,16 +218,26 @@ def evaluate_cross_subject(
         )
         subject_scores[int(subj)] = score
 
+        if len(y_pred) > 0:
+            subject_results[int(subj)] = SubjectResult(
+                subject_id=int(subj),
+                y_true=y_true.tolist(),
+                y_pred=y_pred.tolist(),
+                accuracy=score,
+            )
+
     return EvaluationResult(
         evaluation=EvaluationType.CROSS_SUBJECT,
+        split_type=SplitType.NONE,
         accuracy_mean=float(np.mean(list(subject_scores.values()))),
         accuracy_std=float(np.std(list(subject_scores.values()))),
         per_subject=subject_scores,
+        per_subject_results=subject_results,
     )
 
 
 def evaluate_intra_subject_fixed_split(
-    model: IFittable,
+    model: ITrainableModel,
     X: np.ndarray,
     y: np.ndarray,
     subject_ids: np.ndarray,
@@ -223,6 +248,7 @@ def evaluate_intra_subject_fixed_split(
     """Intra-subject evaluation using a single fixed train/test split per subject."""
     unique_subjects = np.unique(subject_ids)
     subject_scores = {}
+    subject_results = {}
 
     for i, subj in enumerate(unique_subjects):
         print(f'  Intra-subject fixed split: subject {i+1}/{len(unique_subjects)}...', flush=True)
@@ -237,23 +263,33 @@ def evaluate_intra_subject_fixed_split(
             random_state=42,
         )
 
-        score, _ = _execute_run(
+        score, y_pred, y_true, _ = _execute_run(
             model, X_train, y_train, X_test, y_test,
             run_id, save_dir,
             validation_ratio=validation_ratio,
         )
         subject_scores[int(subj)] = score
 
+        if len(y_pred) > 0:
+            subject_results[int(subj)] = SubjectResult(
+                subject_id=int(subj),
+                y_true=y_true.tolist(),
+                y_pred=y_pred.tolist(),
+                accuracy=score,
+            )
+
     return EvaluationResult(
         evaluation=EvaluationType.INTRA_SUBJECT,
+        split_type=SplitType.FIXED,
         accuracy_mean=float(np.mean(list(subject_scores.values()))),
         accuracy_std=float(np.std(list(subject_scores.values()))),
         per_subject=subject_scores,
+        per_subject_results=subject_results,
     )
 
 
 def evaluate_session_split(
-    model: IFittable,
+    model: ITrainableModel,
     X: np.ndarray,
     y: np.ndarray,
     subject_ids: np.ndarray,
@@ -266,6 +302,7 @@ def evaluate_session_split(
     """Exact BCI Competition IV 2a protocol: Train on Session 1, Test on Session 2."""
     unique_subjects = np.unique(subject_ids)
     subject_scores = {}
+    subject_results = {}
 
     for i, subj in enumerate(unique_subjects):
         print(f'  Session split: subject {i+1}/{len(unique_subjects)}...', flush=True)
@@ -280,7 +317,7 @@ def evaluate_session_split(
             print(f'    Skipping subject {subj} — missing session data')
             continue
 
-        score, _ = _execute_run(
+        score, y_pred, y_true, _ = _execute_run(
             model, X[train_mask], y[train_mask],
             X[test_mask], y[test_mask],
             run_id, save_dir,
@@ -289,9 +326,19 @@ def evaluate_session_split(
         )
         subject_scores[int(subj)] = score
 
+        if len(y_pred) > 0:
+            subject_results[int(subj)] = SubjectResult(
+                subject_id=int(subj),
+                y_true=y_true.tolist(),
+                y_pred=y_pred.tolist(),
+                accuracy=score,
+            )
+
     return EvaluationResult(
         evaluation=EvaluationType.INTRA_SUBJECT,
+        split_type=SplitType.SESSION,
         accuracy_mean=float(np.mean(list(subject_scores.values()))),
         accuracy_std=float(np.std(list(subject_scores.values()))),
         per_subject=subject_scores,
+        per_subject_results=subject_results,
     )
